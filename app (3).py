@@ -14,15 +14,13 @@ st.set_page_config(page_title='FraudShield', page_icon='🛡️', layout='wide')
 def load_models():
     xgb = pickle.load(open('fraud_model_xgb.pkl', 'rb'))
     lgbm = pickle.load(open('fraud_model_lgbm .pkl', 'rb'))
-    rf = pickle.load(open('fraud_model_rf.pkl', 'rb'))
+    # rf = pickle.load(open('fraud_model_rf.pkl', 'rb'))
     cfg = pickle.load(open('ensemble_config.pkl', 'rb'))
     explainer = shap.TreeExplainer(xgb)
+    return xgb, lgbm, cfg, explainer
 
-    return xgb, lgbm, rf, cfg, explainer
+xgb, lgbm, cfg, explainer = load_models()
 
-xgb, lgbm, rf, cfg, explainer = load_models()
-
-# ── build_features — leakage features removed ────────────────────────────────
 def build_features(amount, txn_type, hour,
                    old_bal_orig, new_bal_orig,
                    old_bal_dest, new_bal_dest):
@@ -50,7 +48,6 @@ def build_features(amount, txn_type, hour,
         'is_large_transaction'   : is_large_transaction,
         'balance_drain_pct'      : balance_drain_pct,
         'is_full_drain'          : is_full_drain,
-        # Graph features — defaulted to 0 (unknown at single-txn inference)
         'orig_out_degree'        : 0,
         'dest_in_degree'         : 0,
         'orig_unique_receivers'  : 0,
@@ -59,18 +56,15 @@ def build_features(amount, txn_type, hour,
         'dest_only_receives'     : 0,
         'pair_tx_count'          : 0,
         'orig_fraud_exposure'    : 0,
-        # Velocity features — defaulted to 0 (unknown at single-txn inference)
         'amount_zscore'          : 0,
         'tx_count_total_feat'    : 0,
         'amt_mean_sender'        : 0,
         'step_gap'               : 0,
         'dest_is_new'            : 1,
-        # Type one-hot
         'type_TRANSFER'          : int(txn_type == 'TRANSFER'),
         'type_CASH_OUT'          : int(txn_type == 'CASH_OUT'),
     }
 
-# ── UI ────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Outfit:wght@400;600;700&display=swap');
@@ -95,7 +89,6 @@ for k, v in [('history', []), ('total_checked', 0), ('total_fraud', 0), ('total_
 
 tab1, tab2, tab3 = st.tabs(['🔍 Analyze Transaction', '📊 Dashboard', '📈 Model Info'])
 
-# ── TAB 1 : Analyze ──────────────────────────────────────────────────────────
 with tab1:
     col1, col2 = st.columns(2, gap='large')
 
@@ -127,24 +120,19 @@ with tab1:
 
         row = pd.DataFrame([feats])
 
-        row_xgb  = row.reindex(columns=xgb.feature_names_in_,  fill_value=0)
-        row_lgbm = row.reindex(columns=lgbm.feature_name_,     fill_value=0)
-        row_rf   = row.reindex(columns=rf.feature_names_in_,   fill_value=0)
+        row_xgb  = row.reindex(columns=xgb.feature_names_in_, fill_value=0)
+        row_lgbm = row.reindex(columns=lgbm.feature_name_, fill_value=0)
 
         p_xgb  = xgb.predict_proba(row_xgb)[0][1]
         p_lgbm = lgbm.predict_proba(row_lgbm)[0][1]
-        p_rf   = rf.predict_proba(row_rf)[0][1]
 
-        prob = (cfg['w_xgb']  * p_xgb  +
-                cfg['w_lgbm'] * p_lgbm +
-                cfg['w_rf']   * p_rf)
+        prob = (p_xgb + p_lgbm) / 2
         pct  = prob * 100
 
-        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1, mc2, mc3 = st.columns(3)
         mc1.metric('XGBoost',      f'{p_xgb*100:.1f}%')
         mc2.metric('LightGBM',     f'{p_lgbm*100:.1f}%')
-        mc3.metric('RandomForest', f'{p_rf*100:.1f}%')
-        mc4.metric('🎯 Ensemble',  f'{pct:.1f}%')
+        mc3.metric('🎯 Ensemble',  f'{pct:.1f}%')
 
         if prob >= cfg['threshold']:
             st.error(f'🚨 FRAUD DETECTED — {pct:.1f}% probability')
@@ -158,7 +146,6 @@ with tab1:
 
         st.progress(float(min(prob, 1.0)))
 
-        # ── SHAP plain-English explanation ────────────────────────────────────
         st.markdown('#### 🧠 Why did the model decide this?')
         try:
             shap_vals   = explainer.shap_values(row_xgb)
@@ -208,7 +195,6 @@ with tab1:
         except Exception as e:
             st.info(f'Explanation unavailable: {e}')
 
-        # ── Session state update ──────────────────────────────────────────────
         st.session_state.total_checked += 1
         if verdict == 'FRAUD':
             st.session_state.total_fraud += 1
@@ -221,7 +207,6 @@ with tab1:
             'Verdict': verdict
         })
 
-# ── TAB 2 : Dashboard ─────────────────────────────────────────────────────────
 with tab2:
     c1, c2, c3 = st.columns(3)
     c1.metric('Total Analyzed', st.session_state.total_checked)
@@ -231,7 +216,6 @@ with tab2:
     if st.session_state.history:
         st.dataframe(pd.DataFrame(st.session_state.history), use_container_width=True)
 
-# ── TAB 3 : Model Info ────────────────────────────────────────────────────────
 with tab3:
     st.markdown("""
     ### Model Architecture
