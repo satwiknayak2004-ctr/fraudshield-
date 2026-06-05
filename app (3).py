@@ -11,12 +11,13 @@ warnings.filterwarnings('ignore')
 st.set_page_config(page_title='FraudShield', page_icon='🛡️', layout='wide')
 
 @st.cache_resource
-def load_models():
-xgb = pickle.load(open('fraud_model_xgb.pkl', 'rb'))
-lgbm = pickle.load(open('fraud_model_lgbm (1).pkl', 'rb'))
-rf = pickle.load(open('fraud_model_rf.pkl', 'rb'))
-cfg = pickle.load(open('ensemble_config.pkl', 'rb'))
-    explainer = shap.TreeExplainer(xgb)
+def load models():
+    xgb = pickle.load(open('fraud_model_xgb.pkl', 'rb'))
+    lgbm = pickle.load(open('fraud_model_lgbm (1).pkl', 'rb'))
+    rf = pickle.load(open('fraud_model_rf.pkl', 'rb'))
+    cfg = pickle.load(open('ensemble_config.pkl', 'rb'))
+
+    return xgb, lgbm, rf, cfg
     return xgb, lgbm, rf, cfg, explainer
 
 xgb, lgbm, rf, cfg, explainer = load_models()
