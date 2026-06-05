@@ -16,8 +16,8 @@ def load_models():
     lgbm = pickle.load(open('fraud_model_lgbm (1).pkl', 'rb'))
     rf = pickle.load(open('fraud_model_rf.pkl', 'rb'))
     cfg = pickle.load(open('ensemble_config.pkl', 'rb'))
+    explainer = shap.TreeExplainer(xgb)
 
-    return xgb, lgbm, rf, cfg
     return xgb, lgbm, rf, cfg, explainer
 
 xgb, lgbm, rf, cfg, explainer = load_models()
